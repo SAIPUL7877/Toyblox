@@ -1,0 +1,334 @@
+const authView = document.getElementById('authView');
+const appView = document.getElementById('appView');
+const authForm = document.getElementById('authForm');
+const authMessage = document.getElementById('authMessage');
+const authSubmit = document.getElementById('authSubmit');
+const switchAuth = document.getElementById('switchAuth');
+const switchText = document.getElementById('switchText');
+const usernameInput = document.getElementById('username');
+const passwordInput = document.getElementById('password');
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const gameOverlay = document.getElementById('gameOverlay');
+const overlayTitle = document.getElementById('overlayTitle');
+const overlayText = document.getElementById('overlayText');
+const gameStatus = document.getElementById('gameStatus');
+const gameStart = document.getElementById('gameStart');
+const keys = { left: false, right: false, jump: false };
+const player = { x: 80, y: 284, w: 26, h: 48, vx: 0, vy: 0, grounded: false };
+const platforms = [{ x: 0, y: 350, w: 800 }, { x: 90, y: 278, w: 120 }, { x: 315, y: 245, w: 135 }, { x: 570, y: 290, w: 135 }];
+let registering = true;
+let currentUser = '';
+let gameActive = false;
+let timeLeft = 45;
+let lastTime = 0;
+let disaster = 'METEOR';
+let hazards = [];
+let hazardClock = 0;
+let jumpQueued = false;
+let animationId;
+
+function getUsers() {
+  try { return JSON.parse(localStorage.getItem('toybloxUsers') || '{}'); }
+  catch { return {}; }
+}
+function getData(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+  catch { return fallback; }
+}
+function saveData(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); }
+  catch { /* Storage may be unavailable in private browsing. */ }
+}
+async function hashPassword(value, username) {
+  if (!window.crypto?.subtle) throw new Error('Browser ini belum mendukung penyimpanan akun demo yang aman.');
+  const bytes = new TextEncoder().encode(`${username.toLowerCase()}:${value}:toyblox-demo`);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+function setAuthMode(isRegistering) {
+  registering = isRegistering;
+  authSubmit.textContent = registering ? 'Daftar' : 'Login';
+  switchText.textContent = registering ? 'Sudah punya akun?' : 'Belum punya akun?';
+  switchAuth.textContent = registering ? 'Login' : 'Daftar';
+  passwordInput.autocomplete = registering ? 'new-password' : 'current-password';
+  authMessage.textContent = '';
+}
+switchAuth.addEventListener('click', () => setAuthMode(!registering));
+authForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
+  if (!/^[\p{L}\p{N}_-]{3,18}$/u.test(username)) {
+    authMessage.textContent = 'Nama pengguna 3–18 karakter: huruf, angka, _ atau -.';
+    return;
+  }
+  const users = getUsers();
+  const userKey = username.toLowerCase();
+  authSubmit.disabled = true;
+  authMessage.textContent = '';
+  try {
+    const hash = await hashPassword(password, username);
+    if (registering) {
+      if (users[userKey]) {
+        authMessage.textContent = 'Nama pengguna itu sudah terdaftar. Coba login.';
+        return;
+      }
+      users[userKey] = { name: username, passwordHash: hash };
+      saveData('toybloxUsers', users);
+      saveData(`toybloxRobux:${userKey}`, 1000);
+    } else if (!users[userKey] || users[userKey].passwordHash !== hash) {
+      authMessage.textContent = 'Nama pengguna atau kata sandi tidak cocok.';
+      return;
+    }
+    currentUser = users[userKey].name;
+    sessionStorage.setItem('toybloxCurrentUser', currentUser);
+    enterApp();
+  } catch (error) {
+    authMessage.textContent = error.message || 'Tidak bisa memproses akun demo.';
+  } finally {
+    authSubmit.disabled = false;
+  }
+});
+
+function enterApp() {
+  if (!currentUser) return;
+  authView.hidden = true;
+  appView.hidden = false;
+  document.getElementById('displayName').textContent = currentUser;
+  document.getElementById('heroName').textContent = currentUser;
+  refreshRobux();
+  renderChat();
+  drawScene();
+}
+function refreshRobux() {
+  const balance = getData(`toybloxRobux:${currentUser.toLowerCase()}`, 1000);
+  document.getElementById('robuxCount').textContent = balance;
+}
+document.getElementById('logoutButton').addEventListener('click', () => {
+  sessionStorage.removeItem('toybloxCurrentUser');
+  currentUser = '';
+  appView.hidden = true;
+  authView.hidden = false;
+  authForm.reset();
+  setAuthMode(false);
+  stopGame();
+});
+
+function renderChat() {
+  const messages = getData('toybloxLocalChat', []);
+  const container = document.getElementById('chatMessages');
+  container.replaceChildren();
+  messages.slice(-40).forEach((message) => {
+    const item = document.createElement('div');
+    item.className = 'chat-message';
+    const name = document.createElement('strong');
+    name.textContent = message.name;
+    const text = document.createElement('span');
+    text.textContent = message.text;
+    item.append(name, text);
+    container.append(item);
+  });
+  container.scrollTop = container.scrollHeight;
+}
+document.getElementById('chatForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const messages = getData('toybloxLocalChat', []);
+  messages.push({ name: currentUser, text });
+  saveData('toybloxLocalChat', messages.slice(-40));
+  input.value = '';
+  renderChat();
+});
+
+function drawBaconAvatar(x, y) {
+  ctx.fillStyle = '#f2bd91';
+  ctx.fillRect(x + 5, y + 2, 17, 17);
+  ctx.fillStyle = '#b24d39';
+  ctx.fillRect(x + 3, y, 20, 5);
+  ctx.fillStyle = '#edca78';
+  ctx.fillRect(x + 5, y + 3, 16, 3);
+  ctx.fillStyle = '#30324c';
+  ctx.fillRect(x + 9, y + 9, 2, 2);
+  ctx.fillRect(x + 17, y + 9, 2, 2);
+  ctx.fillStyle = '#5a79de';
+  ctx.fillRect(x + 3, y + 19, 22, 17);
+  ctx.fillStyle = '#f2bd91';
+  ctx.fillRect(x, y + 21, 4, 14);
+  ctx.fillRect(x + 24, y + 21, 4, 14);
+  ctx.fillStyle = '#343b5c';
+  ctx.fillRect(x + 5, y + 36, 8, 12);
+  ctx.fillRect(x + 16, y + 36, 8, 12);
+}
+function drawScene() {
+  const sky = ctx.createLinearGradient(0, 0, 0, 400);
+  sky.addColorStop(0, '#9bdcff');
+  sky.addColorStop(1, '#e5f7ff');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, 800, 400);
+  ctx.fillStyle = '#ffffffaa';
+  [[100, 65], [350, 92], [655, 54]].forEach(([x, y]) => {
+    ctx.beginPath(); ctx.arc(x, y, 20, 0, Math.PI * 2); ctx.arc(x + 22, y - 7, 24, 0, Math.PI * 2); ctx.arc(x + 46, y, 18, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.fillStyle = '#69ca80';
+  ctx.fillRect(0, 350, 800, 50);
+  ctx.fillStyle = '#a96b3e';
+  platforms.slice(1).forEach((platform) => {
+    ctx.fillRect(platform.x, platform.y, platform.w, 12);
+    ctx.fillStyle = '#5cc66b'; ctx.fillRect(platform.x, platform.y, platform.w, 5);
+    ctx.fillStyle = '#a96b3e';
+  });
+  if (disaster === 'FLOOD' && gameActive) {
+    ctx.fillStyle = '#388ee8aa';
+    const waterY = Math.max(255, 350 - ((45 - timeLeft) * 3.4));
+    ctx.fillRect(0, waterY, 800, 400 - waterY);
+  }
+  hazards.forEach((hazard) => {
+    if (hazard.type === 'meteor') {
+      ctx.fillStyle = '#e65a47'; ctx.beginPath(); ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffb15c'; ctx.beginPath(); ctx.arc(hazard.x - 3, hazard.y - 3, hazard.r * .48, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.fillStyle = '#79533c'; ctx.beginPath(); ctx.arc(hazard.x, hazard.y, hazard.r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c19a6c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(hazard.x - 7, hazard.y); ctx.lineTo(hazard.x + 7, hazard.y); ctx.stroke();
+    }
+  });
+  drawBaconAvatar(player.x, player.y);
+  if (gameActive) {
+    ctx.fillStyle = '#202844'; ctx.font = 'bold 18px system-ui'; ctx.fillText(`${Math.ceil(timeLeft)}s`, 18, 30);
+    ctx.fillStyle = '#fff'; ctx.fillText(disaster === 'FLOOD' ? 'BANJIR!' : disaster === 'EARTHQUAKE' ? 'GEMPA!' : 'METEOR!', 18, 54);
+  }
+}
+function startGame() {
+  if (gameActive) return;
+  gameActive = true;
+  timeLeft = 45;
+  player.x = 80; player.y = 302; player.vx = 0; player.vy = 0; player.grounded = false;
+  hazards = [];
+  hazardClock = 0;
+  disaster = ['METEOR', 'FLOOD', 'EARTHQUAKE'][Math.floor(Math.random() * 3)];
+  gameOverlay.classList.add('is-hidden');
+  gameStatus.textContent = `Bencana: ${disaster === 'FLOOD' ? 'banjir' : disaster === 'EARTHQUAKE' ? 'gempa' : 'hujan meteor'} — bertahan 45 detik!`;
+  gameStart.textContent = 'Sedang bermain…';
+  gameStart.disabled = true;
+  lastTime = performance.now();
+  cancelAnimationFrame(animationId);
+  animationId = requestAnimationFrame(gameLoop);
+}
+function finishGame(survived) {
+  gameActive = false;
+  gameStart.disabled = false;
+  if (survived) {
+    const key = `toybloxRobux:${currentUser.toLowerCase()}`;
+    saveData(key, getData(key, 1000) + 25);
+    refreshRobux();
+    overlayTitle.textContent = 'Kamu selamat! 🎉';
+    overlayText.textContent = 'Bonus 25 Robux demo ditambahkan ke akunmu.';
+    gameStatus.textContent = 'Hebat! Kamu berhasil bertahan dari bencana.';
+  } else {
+    overlayTitle.textContent = 'Yah, kamu terkena bencana!';
+    overlayText.textContent = 'Coba lagi dan cari tempat yang lebih aman.';
+    gameStatus.textContent = 'Coba lagi — terus bergerak dan lompat!';
+  }
+  gameOverlay.classList.remove('is-hidden');
+  gameStart.textContent = 'Main lagi';
+  drawScene();
+}
+function stopGame() {
+  gameActive = false;
+  cancelAnimationFrame(animationId);
+  keys.left = false; keys.right = false; keys.jump = false;
+}
+function gameLoop(timestamp) {
+  if (!gameActive) return;
+  const dt = Math.min((timestamp - lastTime) / 1000 || 0, 0.035);
+  lastTime = timestamp;
+  timeLeft -= dt;
+  player.vx = (Number(keys.right) - Number(keys.left)) * 245;
+  if (jumpQueued && player.grounded) { player.vy = -540; player.grounded = false; }
+  jumpQueued = false;
+  const previousBottom = player.y + player.h;
+  player.x = Math.max(0, Math.min(canvas.width - player.w, player.x + player.vx * dt));
+  player.vy = Math.min(player.vy + 1450 * dt, 850);
+  player.y += player.vy * dt;
+  player.grounded = false;
+  if (player.vy >= 0) {
+    platforms.forEach((platform) => {
+      if (player.x + player.w > platform.x && player.x < platform.x + platform.w && previousBottom <= platform.y && player.y + player.h >= platform.y) {
+        player.y = platform.y - player.h; player.vy = 0; player.grounded = true;
+      }
+    });
+  }
+  if (disaster === 'METEOR') {
+    hazardClock += dt;
+    if (hazardClock > .72) {
+      hazardClock = 0;
+      hazards.push({ x: 25 + Math.random() * 750, y: -10, r: 11 + Math.random() * 8, type: 'meteor', vy: 220 + Math.random() * 130 });
+    }
+    hazards.forEach((hazard) => { hazard.y += hazard.vy * dt; });
+    hazards = hazards.filter((hazard) => hazard.y < 420);
+    if (hazards.some((hazard) => hazard.x + hazard.r > player.x && hazard.x - hazard.r < player.x + player.w && hazard.y + hazard.r > player.y && hazard.y - hazard.r < player.y + player.h)) {
+      finishGame(false); return;
+    }
+  }
+  if (disaster === 'EARTHQUAKE') {
+    hazardClock += dt;
+    if (hazardClock > 1.1) {
+      hazardClock = 0;
+      const direction = Math.random() < 0.5 ? 1 : -1;
+      hazards.push({ x: direction > 0 ? -20 : 820, y: 337, r: 14, type: 'rock', vx: direction * (170 + Math.random() * 90) });
+    }
+    hazards.forEach((hazard) => { hazard.x += hazard.vx * dt; });
+    hazards = hazards.filter((hazard) => hazard.x > -40 && hazard.x < 840);
+    if (hazards.some((hazard) => hazard.x + hazard.r > player.x && hazard.x - hazard.r < player.x + player.w && hazard.y + hazard.r > player.y && hazard.y - hazard.r < player.y + player.h)) {
+      finishGame(false); return;
+    }
+  }
+  if (disaster === 'FLOOD' && timeLeft < 38) {
+    const waterY = Math.max(255, 350 - ((45 - timeLeft) * 3.4));
+    if (player.y + player.h > waterY) { finishGame(false); return; }
+  }
+  if (player.y > 415) { finishGame(false); return; }
+  drawScene();
+  if (timeLeft <= 0) { finishGame(true); return; }
+  animationId = requestAnimationFrame(gameLoop);
+}
+function setControl(control, pressed) {
+  if (control === 'jump') {
+    if (pressed && !keys.jump) jumpQueued = true;
+    keys.jump = pressed;
+  } else keys[control] = pressed;
+}
+gameStart.addEventListener('click', startGame);
+document.getElementById('playButton').addEventListener('click', () => {
+  document.getElementById('gameTitle').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  startGame();
+});
+window.addEventListener('keydown', (event) => {
+  const key = event.key.toLowerCase();
+  if (['arrowleft', 'arrowright', 'arrowup', ' ', 'a', 'd', 'w'].includes(key)) event.preventDefault();
+  if (key === 'a' || key === 'arrowleft') setControl('left', true);
+  if (key === 'd' || key === 'arrowright') setControl('right', true);
+  if (key === ' ' || key === 'w' || key === 'arrowup') setControl('jump', true);
+});
+window.addEventListener('keyup', (event) => {
+  const key = event.key.toLowerCase();
+  if (key === 'a' || key === 'arrowleft') setControl('left', false);
+  if (key === 'd' || key === 'arrowright') setControl('right', false);
+  if (key === ' ' || key === 'w' || key === 'arrowup') setControl('jump', false);
+});
+window.addEventListener('blur', () => { keys.left = false; keys.right = false; keys.jump = false; });
+document.querySelectorAll('[data-control]').forEach((button) => {
+  const control = button.dataset.control;
+  button.addEventListener('pointerdown', (event) => { event.preventDefault(); button.setPointerCapture(event.pointerId); setControl(control, true); });
+  button.addEventListener('pointerup', () => setControl(control, false));
+  button.addEventListener('pointercancel', () => setControl(control, false));
+  button.addEventListener('lostpointercapture', () => setControl(control, false));
+});
+
+try {
+  currentUser = sessionStorage.getItem('toybloxCurrentUser') || '';
+} catch { currentUser = ''; }
+if (currentUser && getUsers()[currentUser.toLowerCase()]) enterApp();
+else drawScene();
