@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Toyblox — Dunia Game</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section id="authView" class="auth-view">
+        <div class="brand-mark" aria-hidden="true">T</div>
+        <p class="eyebrow">DUNIA GAME BUATANMU</p>
+        <h1>Selamat datang di <span>Toyblox</span></h1>
+        <p class="muted auth-copy">Buat akun demo, pilih game, dan mulai petualanganmu.</p>
+        <form id="authForm" class="auth-form">
+          <label for="username">Nama pengguna</label>
+          <input id="username" name="username" minlength="3" maxlength="18" autocomplete="username" required placeholder="Contoh: pemain123" />
+          <label for="password">Kata sandi</label>
+          <input id="password" name="password" type="password" minlength="4" autocomplete="current-password" required placeholder="Minimal 4 karakter" />
+          <p id="authMessage" class="form-message" aria-live="polite"></p>
+          <button id="authSubmit" class="primary-button" type="submit">Daftar</button>
+        </form>
+        <p class="switch-auth"><span id="switchText">Sudah punya akun?</span> <button id="switchAuth" class="text-button" type="button">Login</button></p>
+        <p class="disclaimer">Demo Toyblox: akun dan mata uang hanya simulasi di browser ini. Bukan layanan Roblox resmi.</p>
+      </section>
+
+      <section id="appView" class="app-view" hidden>
+        <header class="topbar">
+          <a class="wordmark" href="#home" aria-label="Toyblox beranda"><span class="brand-small">T</span> Toyblox</a>
+          <div class="user-tools">
+            <span class="robux-pill" title="Mata uang simulasi">◆ <strong id="robuxCount">0</strong> <small>Robux demo</small></span>
+            <span class="welcome-user">Hai, <strong id="displayName"></strong></span>
+            <button id="logoutButton" class="quiet-button" type="button">Keluar</button>
+          </div>
+        </header>
+
+        <div class="dashboard-grid">
+          <section class="welcome-panel">
+            <div>
+              <p class="eyebrow">PORTAL PETUALANGAN</p>
+              <h1>Halo, <span id="heroName"></span>!</h1>
+              <p class="muted">Pilih game dan buktikan kamu bisa bertahan.</p>
+              <button id="playButton" class="primary-button play-button" type="button">▶ Mainkan Natural Disaster</button>
+            </div>
+            <div class="hero-avatar" aria-label="Avatar bacon"><div class="bacon-hair"></div><div class="avatar-face"><i></i><i></i><b></b></div><div class="avatar-shirt"></div><div class="avatar-legs"><i></i><i></i></div></div>
+          </section>
+
+          <section class="game-panel" aria-labelledby="gameTitle">
+            <div class="section-heading"><div><p class="eyebrow">GAME PILIHAN</p><h2 id="gameTitle">Natural Disaster</h2></div><span class="game-tag">MINI-GAME</span></div>
+            <p class="muted game-description">Bertahan dari bencana selama 45 detik. Waspadai meteor, gempa, dan air yang naik!</p>
+            <div class="canvas-wrap"><canvas id="gameCanvas" width="800" height="400" aria-label="Permainan bertahan dari bencana"></canvas><div id="gameOverlay" class="game-overlay"><strong id="overlayTitle">Siap bertahan?</strong><span id="overlayText">Tekan tombol mulai untuk bermain.</span></div></div>
+            <div class="game-footer"><span id="gameStatus" aria-live="polite">Gerak: A/D atau ←/→ · Lompat: Spasi</span><button id="gameStart" class="primary-button" type="button">Mulai game</button></div>
+            <div class="touch-controls" aria-label="Kontrol sentuh"><button type="button" data-control="left" aria-label="Kiri">◀</button><button type="button" data-control="right" aria-label="Kanan">▶</button><button type="button" data-control="jump" aria-label="Lompat">⤒</button></div>
+          </section>
+
+          <aside class="chat-panel">
+            <div class="section-heading"><div><p class="eyebrow">RUANG LOKAL</p><h2>Chat</h2></div><span class="online-dot">● lokal</span></div>
+            <p class="chat-notice">Pesan hanya terlihat di browser ini, bukan dikirim ke pemain lain.</p>
+            <div id="chatMessages" class="chat-messages" aria-live="polite" aria-label="Pesan chat"></div>
+            <form id="chatForm" class="chat-form"><label class="sr-only" for="chatInput">Tulis pesan</label><input id="chatInput" maxlength="160" placeholder="Tulis pesan..." autocomplete="off" required /><button type="submit" aria-label="Kirim pesan">➤</button></form>
+          </aside>
+        </div>
+        <footer class="app-footer">Toyblox adalah proyek demo independen. Robux demo tidak memiliki nilai nyata dan tidak bisa ditukar.</footer>
+      </section>
+    </main>
+    <script src="script.js"></script>
+  </body>
+  </html>
+  
